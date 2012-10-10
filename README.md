@@ -3,4 +3,5 @@ socsimulation
 
 SoC Simulation
 
-Placeholder
+soc directory contains header files for SoC components
+soctest directory contains test application
