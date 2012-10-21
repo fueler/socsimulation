@@ -9,17 +9,32 @@
 #include <soc/memory.h>
 
 union TestInstruction {
-    U32 value;
+    U32 value32;
+    U16 value16[2];
+    U8  value8[4];
+
     struct {
         U8 opcode;
         U8 regIndex;
         U16 data;
-    } field;
+    } format1;
+
+    struct {
+        U8 opcode;
+        U8 regIndex1;
+        U8 regIndex2;
+        U8 regIndex3;
+    } format2;
 };
 
-static TestInstruction buildCPUInstruction(U8 opcode,
-                                           U8 regIndex,
-                                           U16 data);
+static TestInstruction buildCPUInstructionFmt1(U8 opcode,
+                                               U8 regIndex,
+                                               U16 data);
+static TestInstruction buildCPUInstructionFmt2(U8 opcode,
+                                               U8 regIndex1,
+                                               U8 regIndex2,
+                                               U8 regIndex3);
+
 
 #define MYMEMORY_SIZE   0x0100
 
@@ -48,15 +63,15 @@ public:
         TestInstruction instruction;
 
         // Store temp data
-        // 0x01 for now is storel
+        // 0x01 for now is loadli
         // so the instruction is reg[0x00].low = 0x1234
-        instruction = buildCPUInstruction(0x01, 0x00, 0x1234);
-        writeU32ToMem(0x0000, instruction.value);
+        instruction = buildCPUInstructionFmt1(0x01, 0x00, 0x1234);
+        writeU32ToMem(0x0000, instruction.value32);
 
-        // 0x02 for now is storeh
+        // 0x02 for now is loadhi
         // so the instruction is reg[0x00].high = 0xABCD
-        instruction = buildCPUInstruction(0x02, 0x00, 0xABCD);
-        writeU32ToMem(0x0004, instruction.value);
+        instruction = buildCPUInstructionFmt1(0x02, 0x00, 0xABCD);
+        writeU32ToMem(0x0004, instruction.value32);
 
         return true;
     }
@@ -99,38 +114,47 @@ public:
     {
         bool retval = true;
         TestInstruction data;
+        U32 oldPC = mContext.reg[REG_PC];
 
-        if (getBus()->request(soc::Bus::BUSOP_READ, mContext.reg[REG_PC], data.value)) {
-            printf("0x%08x: OpCode: 0x%02x RegIndex: 0x%02x Data: 0x%04x\n",
-                       mContext.reg[REG_PC],
-                       data.field.opcode,
-                       data.field.regIndex,
-                       data.field.data);
-
+        if (getBus()->request(soc::Bus::BUSOP_READ, mContext.reg[REG_PC], data.value32)) {
             // Increment Program Counter
             mContext.reg[REG_PC] += INSTRUCTION_SIZE;
 
-            switch (data.field.opcode) {
-            case 0x01: // LOAD LOW data into register
-                if (data.field.regIndex >= MAX_CPUREGISTERS) {
+            switch (data.format1.opcode) {
+            case 0x01: // LOAD LOW Immediate data into register
+                printf("0x%08x: OpCode: %8s(0x%02x) RegIndex: 0x%02x Data: 0x%04x\n",
+                           oldPC,
+                           "LOADLI",
+                           data.format1.opcode,
+                           data.format1.regIndex,
+                           data.format1.data);
+
+                if (data.format1.regIndex >= MAX_CPUREGISTERS) {
                     retval = false;
                 } else {
-                    U32 value = mContext.reg[data.field.regIndex];
+                    U32 value = mContext.reg[data.format1.regIndex];
 
-                    value = (value&0xFFFF0000) | data.field.data;
+                    value = (value&0xFFFF0000) | data.format1.data;
 
-                    mContext.reg[data.field.regIndex] = value;
+                    mContext.reg[data.format1.regIndex] = value;
                 }
                 break;
-            case 0x02: // LOAD HIGH data into register
-                if (data.field.regIndex >= MAX_CPUREGISTERS) {
+            case 0x02: // LOAD HIGH Immediate data into register
+                printf("0x%08x: OpCode: %8s(0x%02x) RegIndex: 0x%02x Data: 0x%04x\n",
+                           oldPC,
+                           "LOADHI",
+                           data.format1.opcode,
+                           data.format1.regIndex,
+                           data.format1.data);
+
+                if (data.format1.regIndex >= MAX_CPUREGISTERS) {
                     retval = false;
                 } else {
-                    U32 value = mContext.reg[data.field.regIndex];
+                    U32 value = mContext.reg[data.format1.regIndex];
 
-                    value = (value&0x00000FFFF) | (data.field.data << 16);
+                    value = (value&0x00000FFFF) | (data.format1.data << 16);
 
-                    mContext.reg[data.field.regIndex] = value;
+                    mContext.reg[data.format1.regIndex] = value;
                 }
                 break;
             default:
@@ -139,12 +163,14 @@ public:
 
             if (retval == false) {
                 // Invalid operation
-                printf("Invalid Instruction: OpCode: 0x%02x RegIndex: 0x%02x Data: 0x%04x\n",
-                       data.field.opcode,
-                       data.field.regIndex,
-                       data.field.data);
+                printf("0x%08x: OpCode: %8s(0x%02x) Byte1: 0x%02x Byte2: 0x%02x Byte3: 0x%02x\n",
+                       oldPC,
+                       "INVALID",
+                       data.format1.opcode,
+                       data.value8[1],
+                       data.value8[2],
+                       data.value8[3]);
             }
-
         } else {
             // failure to read next command
             // from location pc
@@ -229,19 +255,44 @@ int main(int argc, char *argv[])
 
 /**
  * @brief Takes an opcode, register index and data and formats it
- *        in to an instruction
+ *        in to an instruction format 1 type
  * @param opcode operation to perform
  * @param regIndex register index
- * @param data register index
+ * @param data immediate value
  * @return TestInstruction
  */
-TestInstruction buildCPUInstruction(U8 opcode, U8 regIndex, U16 data)
+TestInstruction buildCPUInstructionFmt1(U8 opcode, U8 regIndex, U16 data)
 {
     TestInstruction instruction;
 
-    instruction.field.opcode = opcode;
-    instruction.field.regIndex = regIndex;
-    instruction.field.data = data;
+    instruction.format1.opcode = opcode;
+    instruction.format1.regIndex = regIndex;
+    instruction.format1.data = data;
+
+    return instruction;
+}
+
+
+/**
+ * @brief Takes an opcode and three register indexes and formats it
+ *        in to an instruction format 2 type
+ * @param opcode operation to perform
+ * @param regIndex1 register index
+ * @param regIndex2 register index
+ * @param regIndex3 register index
+ * @return TestInstruction
+ */
+TestInstruction buildCPUInstructionFmt2(U8 opcode,
+                                        U8 regIndex1,
+                                        U8 regIndex2,
+                                        U8 regIndex3)
+{
+    TestInstruction instruction;
+
+    instruction.format2.opcode = opcode;
+    instruction.format2.regIndex1 = regIndex1;
+    instruction.format2.regIndex2 = regIndex2;
+    instruction.format2.regIndex3 = regIndex3;
 
     return instruction;
 }
