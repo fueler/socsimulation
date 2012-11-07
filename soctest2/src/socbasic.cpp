@@ -323,3 +323,28 @@ TestInstruction buildCPUInstructionFmt2(U8 opcode,
 
     return instruction;
 }
+
+
+/**
+ * @brief Takes an opcode, two register indexes and data and formats it
+ *        in to an instruction format 3 type
+ * @param opcode operation to perform
+ * @param regIndex1 register index
+ * @param regIndex2 register index
+ * @param data data
+ * @return TestInstruction
+ */
+TestInstruction buildCPUInstructionFmt3(U8 opcode,
+                                        U8 regIndex1,
+                                        U8 regIndex2,
+                                        U8 data)
+{
+    TestInstruction instruction;
+
+    instruction.format3.opcode = opcode;
+    instruction.format3.regIndex1 = regIndex1;
+    instruction.format3.regIndex2 = regIndex2;
+    instruction.format3.data = data;
+
+    return instruction;
+}

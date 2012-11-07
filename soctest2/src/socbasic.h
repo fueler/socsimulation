@@ -42,6 +42,22 @@ union TestInstruction {
     #error "Invalid Host Configuration"
 #endif
     } format2;
+
+    struct {
+#ifdef HOST_LITTLE_ENDIAN
+        U8 data;
+        U8 regIndex2;
+        U8 regIndex1;
+        U8 opcode;
+#elif defined(HOST_BIG_ENDIAN)
+        U8 opcode;
+        U8 regIndex1;
+        U8 regIndex2;
+        U8 data;
+#else
+    #error "Invalid Host Configuration"
+#endif
+    } format3;
 };
 
 struct Memory
@@ -81,6 +97,10 @@ TestInstruction buildCPUInstructionFmt2(U8 opcode,
                                         U8 regIndex1,
                                         U8 regIndex2,
                                         U8 regIndex3);
+TestInstruction buildCPUInstructionFmt3(U8 opcode,
+                                        U8 regIndex1,
+                                        U8 regIndex2,
+                                        U8 data);
 
 #define swap16(_value) ((((_value)&0x00FF) << 8) | \
                         (((_value)&0xFF00) >> 8))
