@@ -14,11 +14,14 @@ enum {
     OPCODE_SUB    = 0x04, // Fmt2
     OPCODE_DIV    = 0x05, // Fmt2
     OPCODE_STORE  = 0x10, // Fmt3
-    OPCODE_LOAD   = 0x11  // Fmt3
+    OPCODE_LOAD   = 0x11, // Fmt3
+    OPCODE_PUSH   = 0x20, // Fmt2
+    OPCODE_POP    = 0x21  // Fmt2
 };
 
 #define LOWVALUE(_value) (_value&0x0000FFFF)
 #define HIGHVALUE(_value) ((_value&0xFFFF0000) >> 16)
+#define NOT_USED    0xFF
 
 /**
  * @brief resets everything
@@ -35,6 +38,9 @@ bool resetSoC(CPUContext &ctx, Memory &mem)
 
     // Set PC to Reset Vector
     ctx.reg[REG_PC] = CPU_PC_RESET_VECTOR;
+
+    // Set SP to top of memory
+    ctx.reg[REG_SP] = MEMORY_SIZE;
 
     // Initialize Memory
     for (int j=0; j<MEMORY_SIZE; ++j) {
@@ -54,7 +60,6 @@ bool loadProgram(Memory &mem)
 {
     TestInstruction instruction;
     U32 instrAddr = 0x0000;
-    U32 stackAddr = MEMORY_SIZE - 4;
 
     // Load Instructions
 
@@ -81,43 +86,19 @@ bool loadProgram(Memory &mem)
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr +=4;
     }
-    // Store Answer
+
+    // Store Answer by pushing value on the stack
     {
-        // memory[STACKADDR] = reg[1]
-
-        // reg[0] = stackAddr
-        instruction = buildCPUInstructionFmt1(0x01, 0x00, LOWVALUE(stackAddr));
+        // push reg1 on to the stack
+        instruction = buildCPUInstructionFmt2(0x20, 0x01, NOT_USED, NOT_USED);
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
-        instruction = buildCPUInstructionFmt1(0x02, 0x00, HIGHVALUE(stackAddr));
-        write32Memory(mem, instrAddr, instruction.value32);
-        instrAddr += 4;
-
-        // store reg1 @ memory[reg0 + offset]
-        instruction = buildCPUInstructionFmt3(0x10, 0x00, 0x01, 0);
-        write32Memory(mem, instrAddr, instruction.value32);
-        instrAddr += 4;
-
-        // update stack address
-        stackAddr -= 4;
     }
 
-    // Load Answer
+    // Load Answer by poping the value off the stack
     {
-        // reg[1] = memory[STACKADDR]
-
-        // reg[0] =  stackAddr
-        stackAddr += 4;
-
-        instruction = buildCPUInstructionFmt1(0x01, 0x00, LOWVALUE(stackAddr));
-        write32Memory(mem, instrAddr, instruction.value32);
-        instrAddr += 4;
-        instruction = buildCPUInstructionFmt1(0x02, 0x00, HIGHVALUE(stackAddr));
-        write32Memory(mem, instrAddr, instruction.value32);
-        instrAddr += 4;
-
-        // load reg0 @memory[reg0 + offset]
-        instruction = buildCPUInstructionFmt3(0x11, 0x00, 0x00, 0x0);
+        // pop reg0 off of the stack
+        instruction = buildCPUInstructionFmt2(0x21, 0x00, NOT_USED, NOT_USED);
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
     }
@@ -256,6 +237,48 @@ bool executeCPUInstruction(CPUContext &ctx, Memory &mem)
             read32Memory(mem,
                          ctx.reg[data.format3.regIndex1] + (S8)data.format3.data,  // address
                          ctx.reg[data.format3.regIndex2]); // value
+        }
+        break;
+    case OPCODE_PUSH: // SP = SP - 4, mem[SP] = reg1
+        printf("0x%08x: OpCode: %8s(0x%02x) RegIndex: 0x%02x\n",
+               oldPC,
+               "PUSH",
+               data.format2.opcode,
+               data.format2.regIndex1);
+
+        if (data.format2.regIndex1 >= MAX_CPU_REGISTERS) {
+            retval = false;
+        } else {
+            // reg1 has value
+
+            // Update Stack Pointer
+            ctx.reg[REG_SP] = ctx.reg[REG_SP] - 4;
+
+            // Store value on the stack
+            write32Memory(mem,
+                          ctx.reg[REG_SP],  // address
+                          ctx.reg[data.format2.regIndex1]); // value
+        }
+        break;
+    case OPCODE_POP: // reg1 = mem[SP], SP = SP + 4
+        printf("0x%08x: OpCode: %8s(0x%02x) RegIndex: 0x%02x\n",
+               oldPC,
+               "POP",
+               data.format2.opcode,
+               data.format2.regIndex1);
+
+        if (data.format2.regIndex1 >= MAX_CPU_REGISTERS) {
+            retval = false;
+        } else {
+            // reg1 is where the value is stored
+
+            // Store value on the stack
+            read32Memory(mem,
+                         ctx.reg[REG_SP],  // address
+                         ctx.reg[data.format2.regIndex1]); // value
+
+            // Update Stack Pointer
+            ctx.reg[REG_SP] = ctx.reg[REG_SP] + 4;
         }
         break;
     default:

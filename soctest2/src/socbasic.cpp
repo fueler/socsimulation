@@ -37,8 +37,12 @@ bool runProgram(CPUContext &ctx, Memory &mem)
 void debugDumpCPU(const CPUContext &ctx)
 {
     printf("CPU\n");
-    printf("\tpc = 0x%08x\n", ctx.reg[REG_PC]);
-    for (int i=0; i<MAX_CPU_REGISTERS - 1; ++i) {
+
+    // Print the last two, PC and SP
+    printf("\tpc = 0x%08x\tsp = 0x%08x\n", ctx.reg[REG_PC], ctx.reg[REG_SP]);
+
+    // Print the rest of the registers
+    for (int i=0; i<MAX_CPU_REGISTERS - 2; ++i) {
         printf("\treg[%d] = 0x%08x\n", i, ctx.reg[i]);
     }
 }

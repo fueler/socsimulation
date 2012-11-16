@@ -7,6 +7,7 @@
 #include "soccfg.h"
 
 #define REG_PC (MAX_CPU_REGISTERS - 1)
+#define REG_SP (MAX_CPU_REGISTERS - 2)
 
 union TestInstruction {
     U32 value32;
