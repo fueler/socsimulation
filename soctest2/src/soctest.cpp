@@ -63,9 +63,21 @@ bool loadProgram(Memory &mem)
 
     // Load Instructions
 
-    // Example: A = B - C
     {
-        // B = 10... reg[0] = 4
+        // reg0 = Return Address
+        instruction = buildCPUInstructionFmt1(0x01, 0x00, LOWVALUE(0x28));
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr += 4;
+        instruction = buildCPUInstructionFmt1(0x02, 0x00, HIGHVALUE(0x28));
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr += 4;
+
+        // push reg0 on to the stack
+        instruction = buildCPUInstructionFmt2(0x20, 0x00, NOT_USED, NOT_USED);
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr += 4;
+
+        // A = 4... reg[0] = 4
         instruction = buildCPUInstructionFmt1(0x01, 0x00, LOWVALUE(4));
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
@@ -73,32 +85,54 @@ bool loadProgram(Memory &mem)
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
 
-        // C = 3... reg[1] = -3
-        instruction = buildCPUInstructionFmt1(0x01, 0x01, LOWVALUE(-3));
+        // B = 3... reg[1] = 3
+        instruction = buildCPUInstructionFmt1(0x01, 0x01, LOWVALUE(3));
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
-        instruction = buildCPUInstructionFmt1(0x02, 0x01, HIGHVALUE(-3));
+        instruction = buildCPUInstructionFmt1(0x02, 0x01, HIGHVALUE(3));
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
 
-        // A = B - C... reg[1] = reg[0] - reg[1]
-        instruction = buildCPUInstructionFmt2(0x4, 0x00, 0x01, 0x01);
+        // push reg0 on to the stack
+        instruction = buildCPUInstructionFmt2(0x20, 0x00, NOT_USED, NOT_USED);
         write32Memory(mem, instrAddr, instruction.value32);
-        instrAddr +=4;
-    }
+        instrAddr += 4;
 
-    // Store Answer by pushing value on the stack
-    {
         // push reg1 on to the stack
         instruction = buildCPUInstructionFmt2(0x20, 0x01, NOT_USED, NOT_USED);
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
-    }
 
-    // Load Answer by poping the value off the stack
-    {
-        // pop reg0 off of the stack
+		// Jump to funcAdd, 0x30
+        instruction = buildCPUInstructionFmt1(0x01, REG_PC, LOWVALUE(0x30));
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr += 4;
+
+		// answer
+		instrAddr += 4;
+
+		// end of program
+		instrAddr += 4;
+
+		// int funcAdd(int A, int B)
+
+        // pop reg1 (B) off of the stack
+        instruction = buildCPUInstructionFmt2(0x21, 0x01, NOT_USED, NOT_USED);
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr += 4;
+
+        // pop reg0 (A) off of the stack
         instruction = buildCPUInstructionFmt2(0x21, 0x00, NOT_USED, NOT_USED);
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr += 4;
+
+		// C = A + B
+        instruction = buildCPUInstructionFmt2(0x3, 0x00, 0x01, 0x01);
+        write32Memory(mem, instrAddr, instruction.value32);
+        instrAddr +=4;
+
+		// pop PC, answer returned in reg1
+        instruction = buildCPUInstructionFmt2(0x21, REG_PC, NOT_USED, NOT_USED);
         write32Memory(mem, instrAddr, instruction.value32);
         instrAddr += 4;
     }
@@ -168,6 +202,30 @@ bool executeCPUInstruction(CPUContext &ctx, Memory &mem)
         }
         break;
     case OPCODE_ADD: // ADD reg1 + reg2 -> reg3
+        printf("0x%08x: OpCode: %8s(0x%02x) RegIndex: 0x%02x RegIndex: 0x%02x RegIndex: 0x%02x\n",
+                   oldPC,
+                   "ADD",
+                   data.format2.opcode,
+                   data.format2.regIndex1,
+                   data.format2.regIndex2,
+                   data.format2.regIndex3);
+
+        if (data.format2.regIndex1 >= MAX_CPU_REGISTERS) {
+            retval = false;
+        } else if (data.format2.regIndex2 >= MAX_CPU_REGISTERS) {
+            retval = false;
+        } else if (data.format2.regIndex3 >= MAX_CPU_REGISTERS) {
+            retval = false;
+        } else {
+            // reg1 + reg2 -> reg3
+            U32 reg1 = ctx.reg[data.format2.regIndex1];
+            U32 reg2 = ctx.reg[data.format2.regIndex2];
+            U32 reg3;
+
+            reg3 = reg1 + reg2;
+
+            ctx.reg[data.format2.regIndex3] = reg3;
+        }
         break;
     case OPCODE_SUB: // SUB reg1 - reg2 -> reg3
         printf("0x%08x: OpCode: %8s(0x%02x) RegIndex: 0x%02x RegIndex: 0x%02x RegIndex: 0x%02x\n",
@@ -302,3 +360,4 @@ bool executeCPUInstruction(CPUContext &ctx, Memory &mem)
 
     return retval;
 }
+
